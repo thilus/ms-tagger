@@ -23,19 +23,21 @@ import tag.TagGenerator;
 
 public class Starter {
 	
-	public Starter() {
-	
-	}
+    /**
+     * Default constructor.
+     */
+    public Starter() {
+    }
 	
 	public static void main(String[] args) throws IOException {
 		// File input from args
 		File mgfFile = new File("test//test.mgf");
 		
-		if(args[0] != null) {
+		/**if(args[0] != null) {
 			mgfFile = new File(args[0]);
 		} else {
 			throw new IOException("Spectrum input file is missing...");
-		}		
+		}*/	
 		
 		// The MGF reader.
 		MascotGenericFileReader reader = new MascotGenericFileReader(mgfFile);
@@ -117,63 +119,47 @@ public class Starter {
 		System.out.println(count + " identifications in " + spectrumFiles.size() + " spectra.");*/
 	}
 
+	/**
+     * Extracts tag hits from the given spectrum files.
+     *
+     * @param spectrumFiles List of spectrum files
+     * @return List of TagHit objects
+     */
+    private List<TagHit> getTagHits(List<MascotGenericFile> spectrumFiles) {
+        List<TagHit> tagHits = new ArrayList<>();
+        int scan = 1;
+        for (MascotGenericFile mgf : spectrumFiles) {
+            PreProcessor preProcessor = new PreProcessor(mgf);
+            Spectrum expSpectrum = preProcessor.format();
+            if (scan % 100 == 0) System.out.println("Scan number... " + scan);
+            if (expSpectrum.getCharge() < 3) {
+                TagGenerator generator = new TagGenerator(expSpectrum);
+                Graph graph = generator.generateGraph();
+                List<Tag> bestTags = generator.getCTermTags(graph);
+                if (!bestTags.isEmpty()) {
+                    for (int i = 0; i < bestTags.size(); i++) {
+                        Tag tag = bestTags.get(i);
+                        TagHit taghit = new TagHit();
+                        taghit.setScan(scan);
+                        taghit.setRank(i + 1);
+                        String seq = new StringBuffer(tag.toString()).reverse().toString();
+                        taghit.setSequence(seq);
+                        double tagMass = round(tag.getyIonEndMass());
+                        taghit.setMass(tagMass);
+                        taghit.setMassDelta(round(tag.getMassDelta()));
+                        taghit.setScore(round(tag.getScore()));
+                        taghit.setIntensityRSS(tag.getIntensityRRS());
+                        taghit.setMatches(tag.getMatches());
+                        taghit.setnGap(round(expSpectrum.getPrecursorMz() - tagMass));
+                        tagHits.add(taghit);
+                    }
+                }
+            }
+            scan++;
+        }
+        return tagHits;
+    }
 	
-	private List<TagHit> getTagHits(List<MascotGenericFile> spectrumFiles){
-		// Precursor Map initialization
-		List<TagHit> tagHits= new ArrayList<TagHit>();
-		double tagMass;
-		
-		int scan = 1;
-		// Iterate the spectra
-		for (MascotGenericFile mgf : spectrumFiles) {
-			// Preprocessing the spectra.
-			PreProcessor preProcessor = new PreProcessor(mgf);
-			
-			//TagHit
-			TagHit taghit;
-			
-			// Spectrum
-			Spectrum expSpectrum = preProcessor.format();			
-			if(scan % 100 == 0) System.out.println("Scan number... " + scan);
-			
-			// Only charge 2 supported
-			if(expSpectrum.getCharge() < 3){
-				// Instantiate end tags list.				
-				TagGenerator generator = new TagGenerator(expSpectrum);
-				
-				// Generate the graph for the spectrum.
-				Graph graph = generator.generateGraph();
-				
-				// Retrieve the best tags
-				List<Tag> bestTags = generator.getCTermTags(graph);
-				
-				// Iterate through the best tags
-				if (bestTags.size() > 0){
-					for(int i = 0; i < bestTags.size(); i++) {
-						// Tag
-						Tag tag = bestTags.get(i);
-						
-						// Taghit
-						taghit = new TagHit();						
-						taghit.setScan(scan);
-						taghit.setRank(i+1);
-						String seq = new StringBuffer(tag.toString()).reverse().toString();
-						taghit.setSequence(seq);
-						tagMass = round(tag.getyIonEndMass());
-						taghit.setMass(tagMass);
-						taghit.setMassDelta(round(tag.getMassDelta()));
-						taghit.setScore(round(tag.getScore()));
-						taghit.setIntensityRSS(tag.getIntensityRRS());
-						taghit.setMatches(tag.getMatches());
-						taghit.setnGap(round(expSpectrum.getPrecursorMz() - tagMass));
-						tagHits.add(taghit);
-					}
-				}
-			}
-			scan++;
-		}
-		return tagHits;
-	}	
 	
 	private HashMap<Double, Tag> getPrecursorMap(List<MascotGenericFile> spectrumFiles){
 		// Precursor Map initialization
@@ -228,29 +214,35 @@ public class Starter {
 		return precursorMap;
 	}	
 	
-	/**
-     * Helper rounding function.
-     * @param aTotalIntensity
-     * @return Rounded value
+/**
+     * Helper method to round a double value.
+     *
+     * @param precursorMz Double value to round
+     * @return Rounded double value
      */
     private static double round(final double precursorMz) {
         BigDecimal bd = new BigDecimal(precursorMz).setScale(4, RoundingMode.HALF_UP);
         return bd.doubleValue();
     }
     
-    public void writeToFile(List<TagHit> taghits, File outfile){
-    	try {
-			BufferedWriter writer = new BufferedWriter(new FileWriter(outfile));
-			writer.write("\tScan" + " " + "Rank" + " " + "Tag" + " " + "  Score" + " " + "  RRS" + " " + " Ions" + " " + "Delta" + "\t    " + "Mass" + "\t    " + "N_Gap");
-			writer.newLine();
-			for (TagHit tagHit : taghits) {
-				writer.write("\t" + tagHit.getScan() + "\t " + tagHit.getRank() + "\t  " + tagHit.getSequence() + "\t" + tagHit.getScore() + "\t" + tagHit.getIntensityRSS() + "\t " + tagHit.getMatches() + "\t  " + tagHit.getMassDelta() + "\t" + tagHit.getMass() + "\t" + tagHit.getnGap());
-				writer.newLine();
-			}
-			writer.close();
-		} catch (IOException e) {
-
-			e.printStackTrace();
-		}
-	}
-	}
+    /**
+     * Writes the list of TagHits to a file.
+     *
+     * @param taghits List of TagHit objects
+     * @param outfile Output file
+     */
+    public void writeToFile(List<TagHit> taghits, File outfile) {
+        try {
+            BufferedWriter writer = new BufferedWriter(new FileWriter(outfile));
+            writer.write("\tScan" + " " + "Rank" + " " + "Tag" + " " + "  Score" + " " + "  RRS" + " " + " Ions" + " " + "Delta" + "\t    " + "Mass" + "\t    " + "N_Gap");
+            writer.newLine();
+            for (TagHit tagHit : taghits) {
+                writer.write("\t" + tagHit.getScan() + "\t " + tagHit.getRank() + "\t  " + tagHit.getSequence() + "\t" + tagHit.getScore() + "\t" + tagHit.getIntensityRSS() + "\t " + tagHit.getMatches() + "\t  " + tagHit.getMassDelta() + "\t" + tagHit.getMass() + "\t" + tagHit.getnGap());
+                writer.newLine();
+            }
+            writer.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+}
